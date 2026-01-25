@@ -1,4 +1,5 @@
 from api.agents.retrieval_generation import rag_pipeline
+import os
 
 import asyncio
 
@@ -92,7 +93,7 @@ async def ragas_context_recall_id_based(run, example, **_):
 
 
 async def run_rag_pipeline(example):
-    return await asyncio.to_thread(rag_pipeline, example["question"], qdrant_client)
+    return await asyncio.to_thread(rag_pipeline, example["question"])
 
 
 results = asyncio.run(ls_client.aevaluate(
