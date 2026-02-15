@@ -1,4 +1,4 @@
-from langsmith import traceable
+from langsmith import traceable, get_current_run_tree
 
 from langchain_core.messages import convert_to_openai_messages
 from openai import OpenAI
@@ -65,6 +65,15 @@ def agent_node(state) -> dict:
         temperature=0.5,
    )
 
+   current_run = get_current_run_tree()
+
+   if current_run:
+        current_run.metadata["agent_response"] = {
+            "input_tokens": raw_response.usage.prompt_tokens,
+            "output_tokens": raw_response.usage.completion_tokens,
+            "total_tokens": raw_response.usage.total_tokens
+        }
+
    ai_message = format_ai_message(response)
 
    return {
@@ -87,27 +96,40 @@ def agent_node(state) -> dict:
 )
 def intent_router_node(state):
 
-   template = prompt_template_config("api/agents/prompts/intent_router_agent.yaml", "intent_router_agent")
-   
-   prompt = template.render()
+    template = prompt_template_config("api/agents/prompts/intent_router_agent.yaml", "intent_router_agent")
 
-   messages = state.messages
+    prompt = template.render()
 
-   conversation = []
+    messages = state.messages
 
-   for message in messages:
+    conversation = []
+
+    for message in messages:
         conversation.append(convert_to_openai_messages(message))
 
-   client = instructor.from_openai(OpenAI())
+    client = instructor.from_openai(OpenAI())
 
-   response, raw_response = client.chat.completions.create_with_completion(
+    response, raw_response = client.chat.completions.create_with_completion(
         model="gpt-4.1-mini",
         response_model=IntentRouterResponse,
         messages=[{"role": "system", "content": prompt}, *conversation],
         temperature=0.5,
-   )
+    )
 
-   return {
-      "question_relevant": response.question_relevant,
-      "answer": response.answer
-      }
+    current_run = get_current_run_tree()
+
+    if current_run:
+        current_run.metadata["agent_response"] = {
+            "input_tokens": raw_response.usage.prompt_tokens,
+            "output_tokens": raw_response.usage.completion_tokens,
+            "total_tokens": raw_response.usage.total_tokens
+        }
+        trace_id = str(getattr(current_run, "trace_id", current_run.id))
+    else:
+        trace_id = None
+
+    return {
+        "question_relevant": response.question_relevant,
+        "answer": response.answer,
+        "trace_id": trace_id
+        }
