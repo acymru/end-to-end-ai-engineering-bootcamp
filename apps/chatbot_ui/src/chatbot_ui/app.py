@@ -112,6 +112,9 @@ if "messages" not in st.session_state:
 if "used_context" not in st.session_state:
     st.session_state.used_context = []
 
+if "shopping_cart" not in st.session_state:
+    st.session_state.shopping_cart = []
+
 
 # Initialize feedback states (simplified)
 if "latest_feedback" not in st.session_state:
@@ -129,7 +132,7 @@ if "trace_id" not in st.session_state:
 
 with st.sidebar:
     # Create tabs in the sidebar
-    suggestions_tab, = st.tabs(["🔍 Suggestions"])
+    suggestions_tab, shopping_cart_tab = st.tabs(["🔍 Suggestions", "🛒 Shopping Cart"])
     
     # Suggestions Tab
     with suggestions_tab:
@@ -143,11 +146,26 @@ with st.sidebar:
         else:
             st.info("No suggestions yet")
 
+    # Shopping Cart Tab
+    with shopping_cart_tab:
+        if st.session_state.shopping_cart:
+
+            for idx, item in enumerate(st.session_state.shopping_cart):
+                st.caption(item.get('description', 'No description'))
+                if 'product_image_url' in item:
+                    st.image(item["product_image_url"], width=250)
+                st.caption(f"Price: {item['price']} {item['currency']}")
+                st.caption(f"Quantity: {item['quantity']}")
+                st.caption(f"Total price: {item['total_price']} {item['currency']}")
+                st.divider()
+        else:
+            st.info("Your cart is empty")
+            
 
 for idx, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        
+
         # Add feedback buttons only for the latest assistant message (excluding the initial greeting)
         is_latest_assistant = (
             message["role"] == "assistant" and 
@@ -233,7 +251,7 @@ if prompt := st.chat_input("Hello! How can I assist you today?"):
 
         for line in api_call_stream(
             "post", 
-            f"{config.API_URL}/rag", 
+            f"{config.API_URL}/agent",
             json={"query": prompt, "thread_id": session_id},
             stream=True,
             headers={"Accept": "text/event-stream"}
@@ -249,19 +267,22 @@ if prompt := st.chat_input("Hello! How can I assist you today?"):
                         answer = output["data"]["answer"]
                         used_context = output["data"]["used_context"]
                         trace_id = output["data"]["trace_id"]
-                        
+                        shopping_cart = output["data"]["shopping_cart"]
+
+
                         st.session_state.used_context = used_context
                         st.session_state.messages.append({"role": "assistant", "content": answer})
                         st.session_state.trace_id = trace_id
+                        st.session_state.shopping_cart = shopping_cart
 
                         st.session_state.latest_feedback = None
                         st.session_state.show_feedback_box = False
                         st.session_state.feedback_submission_status = None
-                        
+
                         status_placeholder.empty()
                         message_placeholder.markdown(answer)
                         break
-                
+
                 except json.JSONDecodeError:
                     status_placeholder.markdown(f"*{data}*")
 
