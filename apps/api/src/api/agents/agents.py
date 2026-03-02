@@ -9,6 +9,8 @@ from api.agents.utils.utils import format_ai_message
 from pydantic import BaseModel, Field
 from typing import List
 
+from litellm import completion
+
 
 class ToolCall(BaseModel):
     name: str
@@ -20,7 +22,7 @@ class ToolCall(BaseModel):
 class RAGUsedContext(BaseModel):
     id: str = Field(description="The ID of the item used to answer the question")
     description: str = Field(description="Short description of the item used to answer the question")
-
+    
 class ProductQAAgentResponse(BaseModel):
     answer: str = Field(description="Answer to the question.")
     references: list[RAGUsedContext] = Field(description="List of items used to answer the question.")
@@ -64,13 +66,13 @@ class CoordinatorAgentResponse(BaseModel):
     run_type="llm",
     metadata={"ls_provider": "openai", "ls_model_name": "gpt-4.1"}
 )
-def product_qa_agent(state) -> dict:
+def product_qa_agent(state, models=["gpt-4.1", "groq/llama-3.3-70b-versatile"]) -> dict:
 
-   template = prompt_template_config("api/agents/prompts/product_qa_agent.yaml", "product_qa_agent")
-
-   prompt = template.render(
-      available_tools=state.product_qa_agent.available_tools
-   )
+   prompts = {}
+   for model in models:
+        prompts[model] = prompt_template_config("api/agents/prompts/product_qa_agent.yaml", model).render(
+            available_tools=state.product_qa_agent.available_tools
+        )
 
    messages = state.messages
 
@@ -79,14 +81,20 @@ def product_qa_agent(state) -> dict:
    for message in messages:
         conversation.append(convert_to_openai_messages(message))
 
-   client = instructor.from_openai(OpenAI())
+   client = instructor.from_litellm(completion)
 
-   response, raw_response = client.chat.completions.create_with_completion(
-        model="gpt-4.1",
-        response_model=ProductQAAgentResponse,
-        messages=[{"role": "system", "content": prompt}, *conversation],
-        temperature=0.5,
-   )
+   for model in models:
+        try:
+            response, raw_response = client.chat.completions.create_with_completion(
+                model=model,
+                response_model=ProductQAAgentResponse,
+                messages=[{"role": "system", "content": prompts[model]}, *conversation],
+                temperature=0.5,
+            )
+            break
+        except Exception as e:
+            print(f"Error with model {model}: {e}")
+            continue
 
    current_run = get_current_run_tree()
 
@@ -94,7 +102,8 @@ def product_qa_agent(state) -> dict:
         current_run.metadata["usage_metadata"] = {
             "input_tokens": raw_response.usage.prompt_tokens,
             "output_tokens": raw_response.usage.completion_tokens,
-            "total_tokens": raw_response.usage.total_tokens
+            "total_tokens": raw_response.usage.total_tokens,
+            # "cached_tokens": raw_response.usage.prompt_tokens_details.cached_tokens
         }
 
    ai_message = format_ai_message(response)
@@ -119,15 +128,15 @@ def product_qa_agent(state) -> dict:
     run_type="llm",
     metadata={"ls_provider": "openai", "ls_model_name": "gpt-4.1"}
 )
-def shopping_cart_agent(state) -> dict:
+def shopping_cart_agent(state, models=["gpt-4.1", "groq/llama-3.3-70b-versatile"]) -> dict:
 
-   template = prompt_template_config("api/agents/prompts/shopping_cart_agent.yaml", "shopping_cart_agent")
-
-   prompt = template.render(
-      available_tools=state.shopping_cart_agent.available_tools,
-      user_id=state.user_id,
-      cart_id=state.cart_id
-   )
+   prompts = {}
+   for model in models:
+        prompts[model] = prompt_template_config("api/agents/prompts/shopping_cart_agent.yaml", model).render(
+            available_tools=state.shopping_cart_agent.available_tools,
+            user_id=state.user_id,
+            cart_id=state.cart_id
+        )
 
    messages = state.messages
 
@@ -136,14 +145,20 @@ def shopping_cart_agent(state) -> dict:
    for message in messages:
         conversation.append(convert_to_openai_messages(message))
 
-   client = instructor.from_openai(OpenAI())
+   client = instructor.from_litellm(completion)
 
-   response, raw_response = client.chat.completions.create_with_completion(
-        model="gpt-4.1",
-        response_model=ShoppingCartAgentResponse,
-        messages=[{"role": "system", "content": prompt}, *conversation],
-        temperature=0.5,
-   )
+   for model in models:
+        try:
+            response, raw_response = client.chat.completions.create_with_completion(
+                model=model,
+                response_model=ShoppingCartAgentResponse,
+                messages=[{"role": "system", "content": prompts[model]}, *conversation],
+                temperature=0.5,
+            )
+            break
+        except Exception as e:
+            print(f"Error with model {model}: {e}")
+            continue
 
    current_run = get_current_run_tree()
 
@@ -151,7 +166,8 @@ def shopping_cart_agent(state) -> dict:
         current_run.metadata["usage_metadata"] = {
             "input_tokens": raw_response.usage.prompt_tokens,
             "output_tokens": raw_response.usage.completion_tokens,
-            "total_tokens": raw_response.usage.total_tokens
+            "total_tokens": raw_response.usage.total_tokens,
+            # "cached_tokens": raw_response.usage.prompt_tokens_details.cached_tokens
         }
 
    ai_message = format_ai_message(response)
@@ -175,13 +191,13 @@ def shopping_cart_agent(state) -> dict:
     run_type="llm",
     metadata={"ls_provider": "openai", "ls_model_name": "gpt-4.1"}
 )
-def warehouse_manager_agent(state) -> dict:
+def warehouse_manager_agent(state, models=["gpt-4.1", "groq/llama-3.3-70b-versatile"]) -> dict:
 
-   template = prompt_template_config("api/agents/prompts/warehouse_manager_agent.yaml", "warehouse_manager_agent")
-
-   prompt = template.render(
-      available_tools=state.warehouse_manager_agent.available_tools
-   )
+   prompts = {}
+   for model in models:
+        prompts[model] = prompt_template_config("api/agents/prompts/warehouse_manager_agent.yaml", model).render(
+            available_tools=state.warehouse_manager_agent.available_tools
+        )
 
    messages = state.messages
 
@@ -190,14 +206,20 @@ def warehouse_manager_agent(state) -> dict:
    for message in messages:
         conversation.append(convert_to_openai_messages(message))
 
-   client = instructor.from_openai(OpenAI())
+   client = instructor.from_litellm(completion)
 
-   response, raw_response = client.chat.completions.create_with_completion(
-        model="gpt-4.1",
-        response_model=WarehouseManagerAgentResponse,
-        messages=[{"role": "system", "content": prompt}, *conversation],
-        temperature=0.5,
-   )
+   for model in models:
+        try:
+            response, raw_response = client.chat.completions.create_with_completion(
+                model=model,
+                response_model=WarehouseManagerAgentResponse,
+                messages=[{"role": "system", "content": prompts[model]}, *conversation],
+                temperature=0.5,
+            )
+            break
+        except Exception as e:
+            print(f"Error with model {model}: {e}")
+            continue
 
    current_run = get_current_run_tree()
 
@@ -205,7 +227,8 @@ def warehouse_manager_agent(state) -> dict:
         current_run.metadata["usage_metadata"] = {
             "input_tokens": raw_response.usage.prompt_tokens,
             "output_tokens": raw_response.usage.completion_tokens,
-            "total_tokens": raw_response.usage.total_tokens
+            "total_tokens": raw_response.usage.total_tokens,
+            # "cached_tokens": raw_response.usage.prompt_tokens_details.cached_tokens
         }
 
    ai_message = format_ai_message(response)
@@ -230,11 +253,11 @@ def warehouse_manager_agent(state) -> dict:
     run_type="llm",
     metadata={"ls_provider": "openai", "ls_model_name": "gpt-4.1"}
 )
-def coordinator_agent(state):
+def coordinator_agent(state, models=["gpt-4.1", "groq/llama-3.3-70b-versatile"]):
 
-   template = prompt_template_config("api/agents/prompts/coordinator_agent.yaml", "coordinator_agent")
-
-   prompt = template.render()
+   prompts = {}
+   for model in models:
+        prompts[model] = prompt_template_config("api/agents/prompts/coordinator_agent.yaml", model).render()
 
    messages = state.messages
 
@@ -243,14 +266,20 @@ def coordinator_agent(state):
    for message in messages:
         conversation.append(convert_to_openai_messages(message))
 
-   client = instructor.from_openai(OpenAI())
+   client = instructor.from_litellm(completion)
 
-   response, raw_response = client.chat.completions.create_with_completion(
-        model="gpt-4.1",
-        response_model=CoordinatorAgentResponse,
-        messages=[{"role": "system", "content": prompt}, *conversation],
-        temperature=0.5,
-   )
+   for model in models:
+        try:
+            response, raw_response = client.chat.completions.create_with_completion(
+                model=model,
+                response_model=CoordinatorAgentResponse,
+                messages=[{"role": "system", "content": prompts[model]}, *conversation],
+                temperature=0.5,
+            )
+            break
+        except Exception as e:
+            print(f"Error with model {model}: {e}")
+            continue
 
    current_run = get_current_run_tree()
 
@@ -258,10 +287,11 @@ def coordinator_agent(state):
         current_run.metadata["usage_metadata"] = {
             "input_tokens": raw_response.usage.prompt_tokens,
             "output_tokens": raw_response.usage.completion_tokens,
-            "total_tokens": raw_response.usage.total_tokens
+            "total_tokens": raw_response.usage.total_tokens,
+            # "cached_tokens": raw_response.usage.prompt_tokens_details.cached_tokens
         }
         trace_id = str(getattr(current_run, "trace_id", current_run.id))
-
+    
    if response.final_answer:
       ai_message = [AIMessage(
          content=response.answer,
